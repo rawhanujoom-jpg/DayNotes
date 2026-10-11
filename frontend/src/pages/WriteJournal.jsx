@@ -25,7 +25,7 @@ function WriteJournal() {
 
     try {
       const response = await fetch(
-        "http://localhost:5000/journals",
+        "https://daynotes-backend.onrender.com/journals",
         {
           method: "POST",
           body: formData,
