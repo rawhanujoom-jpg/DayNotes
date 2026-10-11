@@ -1,284 +1,279 @@
-
 import { useEffect, useState } from "react";
+
+const API_URL = "https://daynotes-backend.onrender.com";
 
 function MyMemories() {
     const [journals, setJournals] = useState([]);
-    const [search, setSearch] = useState("");
-    const [moodFilter, setMoodFilter] = useState("All");
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState("");
     const [editingId, setEditingId] = useState(null);
+    const [editTitle, setEditTitle] = useState("");
+    const [editContent, setEditContent] = useState("");
+    const [editMood, setEditMood] = useState("Happy");
+    const [editDate, setEditDate] = useState("");
 
-    const [title, setTitle] = useState("");
-    const [date, setDate] = useState("");
-    const [mood, setMood] = useState("Happy");
-    const [content, setContent] = useState("");
-    const [photo, setPhoto] = useState(null);
-
+    // Load all journals from the backend
     const loadJournals = async () => {
         try {
-            const response = await fetch("http://localhost:5000/journals");
+            setLoading(true);
+            setError("");
+
+            const response = await fetch(`${API_URL}/journals`);
 
             if (!response.ok) {
-                throw new Error("Unable to load journals");
+                throw new Error("Failed to load journals.");
             }
 
             const data = await response.json();
+
+            if (!Array.isArray(data)) {
+                throw new Error("Unexpected response from the server.");
+            }
+
             setJournals(data);
-        } catch (error) {
-            console.log("Unable to load journals");
+        } catch (err) {
+            console.error("Error loading journals:", err);
+            setError("Unable to load memories. Please try again.");
+        } finally {
+            setLoading(false);
         }
     };
 
+    // Load journals when the page opens
     useEffect(() => {
         loadJournals();
     }, []);
 
+    // Start editing a journal
     const startEditing = (journal) => {
         setEditingId(journal._id);
-        setTitle(journal.title);
-        setDate(journal.date);
-        setMood(journal.mood || "Happy");
-        setContent(journal.content);
-        setPhoto(null);
-
-        window.scrollTo({ top: 0, behavior: "smooth" });
+        setEditTitle(journal.title || "");
+        setEditContent(journal.content || "");
+        setEditMood(journal.mood || "Happy");
+        setEditDate(journal.date || "");
     };
 
+    // Cancel editing
     const cancelEditing = () => {
         setEditingId(null);
-        setTitle("");
-        setDate("");
-        setMood("Happy");
-        setContent("");
-        setPhoto(null);
+        setEditTitle("");
+        setEditContent("");
+        setEditMood("Happy");
+        setEditDate("");
     };
 
-    const updateJournal = async (e) => {
-        e.preventDefault();
-
-        const formData = new FormData();
-        formData.append("title", title);
-        formData.append("date", date);
-        formData.append("mood", mood);
-        formData.append("content", content);
-
-        if (photo) {
-            formData.append("photo", photo);
-        }
-
+    // Update a journal
+    const updateJournal = async (id) => {
         try {
-            const response = await fetch(
-                `http://localhost:5000/journals/${editingId}`,
-                {
-                    method: "PUT",
-                    body: formData
-                }
-            );
+            const response = await fetch(`${API_URL}/journals/${id}`, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    title: editTitle,
+                    content: editContent,
+                    mood: editMood,
+                    date: editDate,
+                }),
+            });
 
             if (!response.ok) {
-                throw new Error("Unable to update journal");
+                throw new Error("Failed to update journal.");
             }
 
-            alert("Journal updated successfully!");
-
+            alert("Memory updated successfully!");
             cancelEditing();
             await loadJournals();
-        } catch (error) {
-            alert("Unable to update journal. Check your backend.");
+        } catch (err) {
+            console.error("Error updating journal:", err);
+            alert("Unable to update memory. Please try again.");
         }
     };
 
+    // Delete a journal
     const deleteJournal = async (id) => {
-        if (!window.confirm("Are you sure you want to delete this memory?")) {
-            return;
-        }
+        const confirmed = window.confirm(
+            "Are you sure you want to delete this memory?"
+        );
+
+        if (!confirmed) return;
 
         try {
-            const response = await fetch(
-                `http://localhost:5000/journals/${id}`,
-                { method: "DELETE" }
-            );
+            const response = await fetch(`${API_URL}/journals/${id}`, {
+                method: "DELETE",
+            });
 
             if (!response.ok) {
-                throw new Error("Unable to delete journal");
+                throw new Error("Failed to delete journal.");
             }
 
-            await loadJournals();
-        } catch (error) {
-            alert("Unable to delete journal.");
+            setJournals((previousJournals) =>
+                previousJournals.filter((journal) => journal._id !== id)
+            );
+
+            alert("Memory deleted successfully!");
+        } catch (err) {
+            console.error("Error deleting journal:", err);
+            alert("Unable to delete memory. Please try again.");
         }
     };
-const filteredJournals = journals.filter((journal) => {
-    const matchesSearch = journal.title
-        .toLowerCase()
-        .includes(search.toLowerCase());
-
-    const matchesMood =
-        moodFilter === "All" || (journal.mood || "Happy") === moodFilter;
-
-    return matchesSearch && matchesMood;
-});
-   
 
     return (
-        <div className="page-container memories-page">
+        <main className="memories-page">
+            <h1>My Memories</h1>
+            <p>Your journal entries and special moments.</p>
 
-            <div className="page-heading">
-                <p className="eyebrow">YOUR PERSONAL COLLECTION</p>
-                <h1>My memories<span>.</span></h1>
-                <p>Little moments, kept close.</p>
-            </div>
+            <button onClick={loadJournals}>Refresh Memories</button>
 
-            {editingId && (
-                <form className="journal-form" onSubmit={updateJournal}>
-                    <h2>Edit Your Journal</h2>
+            {loading && <p>Loading your memories...</p>}
 
-                    <label htmlFor="edit-title">Journal title</label>
-                    <input
-                        id="edit-title"
-                        type="text"
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
-                        required
-                    />
-
-                    <div className="form-row">
-                        <div>
-                            <label htmlFor="edit-date">Date</label>
-                            <input
-                                id="edit-date"
-                                type="date"
-                                value={date}
-                                onChange={(e) => setDate(e.target.value)}
-                                required
-                            />
-                        </div>
-
-                        <div>
-                            <label htmlFor="edit-mood">Today's mood</label>
-                            <select
-                                id="edit-mood"
-                                value={mood}
-                                onChange={(e) => setMood(e.target.value)}
-                            >
-                                <option>Happy</option>
-                                <option>Calm</option>
-                                <option>Grateful</option>
-                                <option>Excited</option>
-                                <option>Sad</option>
-                                <option>Thoughtful</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <label htmlFor="edit-photo">Change photograph (optional)</label>
-                    <input
-                        id="edit-photo"
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => setPhoto(e.target.files[0] || null)}
-                    />
-
-                    <label htmlFor="edit-content">Your thoughts</label>
-                    <textarea
-                        id="edit-content"
-                        rows="7"
-                        value={content}
-                        onChange={(e) => setContent(e.target.value)}
-                        required
-                    />
-
-                    <button type="submit" className="primary-btn">
-                        Save Changes
-                    </button>
-
-                    <button
-                        type="button"
-                        className="delete-btn"
-                        onClick={cancelEditing}
-                    >
-                        Cancel
-                    </button>
-                </form>
-            )}
-<p className="memory-count">
-    You have saved {journals.length} memories ♡
-</p>
-
-<input
-    className="search-input"
-    type="text"
-    placeholder="Search journal titles..."
-    value={search}
-    onChange={(e) => setSearch(e.target.value)}
-/>
-
-<select
-    className="search-input"
-    value={moodFilter}
-    onChange={(e) => setMoodFilter(e.target.value)}
->
-    <option value="All">All Moods</option>
-    <option value="Happy">Happy</option>
-    <option value="Calm">Calm</option>
-    <option value="Grateful">Grateful</option>
-    <option value="Excited">Excited</option>
-    <option value="Sad">Sad</option>
-    <option value="Thoughtful">Thoughtful</option>
-</select>
-            
-            {filteredJournals.length === 0 ? (
-                <div className="empty-state">
-                    <span>♡</span>
-                    <h2>No memories found</h2>
-                    <p>Your journal entries will appear here.</p>
+            {error && (
+                <div>
+                    <p>{error}</p>
+                    <button onClick={loadJournals}>Try Again</button>
                 </div>
-            ) : (
-                <div className="memory-grid">
-                    {filteredJournals.map((journal) => (
-                        <article className="memory-card" key={journal._id}>
-                            {journal.photo && (
-                                <img
-                                    className="memory-photo"
-                                    src={`http://localhost:5000${journal.photo}`}
-                                    alt={journal.title}
-                                />
-                            )}
+            )}
 
-                            <div className="memory-details">
-                                <p className="memory-date">{journal.date}</p>
-                                <h2>{journal.title}</h2>
+            {!loading && !error && journals.length === 0 && (
+                <p>No memories yet. Write your first journal!</p>
+            )}
 
-                                {journal.mood && (
-                                    <span className="mood-tag">
-                                        {journal.mood}
-                                    </span>
-                                )}
+            <section className="memories-list">
+                {journals.map((journal) => (
+                    <article className="memory-card" key={journal._id}>
+                        {editingId === journal._id ? (
+                            <div>
+                                <h2>Edit Memory</h2>
 
-                                <p className="memory-content">
-                                    {journal.content}
-                                </p>
+                                <label>
+                                    Title:
+                                    <input
+                                        type="text"
+                                        value={editTitle}
+                                        onChange={(e) =>
+                                            setEditTitle(e.target.value)
+                                        }
+                                        required
+                                    />
+                                </label>
+
+                                <br />
+
+                                <label>
+                                    Date:
+                                    <input
+                                        type="date"
+                                        value={editDate}
+                                        onChange={(e) =>
+                                            setEditDate(e.target.value)
+                                        }
+                                    />
+                                </label>
+
+                                <br />
+
+                                <label>
+                                    Mood:
+                                    <select
+                                        value={editMood}
+                                        onChange={(e) =>
+                                            setEditMood(e.target.value)
+                                        }
+                                    >
+                                        <option value="Happy">Happy</option>
+                                        <option value="Sad">Sad</option>
+                                        <option value="Calm">Calm</option>
+                                        <option value="Excited">Excited</option>
+                                        <option value="Grateful">Grateful</option>
+                                        <option value="Angry">Angry</option>
+                                        <option value="Anxious">Anxious</option>
+                                    </select>
+                                </label>
+
+                                <br />
+
+                                <label>
+                                    Journal:
+                                    <textarea
+                                        value={editContent}
+                                        onChange={(e) =>
+                                            setEditContent(e.target.value)
+                                        }
+                                        rows="5"
+                                        required
+                                    />
+                                </label>
+
+                                <br />
 
                                 <button
-                                    className="primary-btn"
-                                    onClick={() => startEditing(journal)}
+                                    onClick={() =>
+                                        updateJournal(journal._id)
+                                    }
                                 >
-                                    Edit Memory
+                                    Save Changes
                                 </button>
 
-                                <button
-                                    className="delete-btn"
-                                    onClick={() => deleteJournal(journal._id)}
-                                >
-                                    Delete Memory
+                                <button onClick={cancelEditing}>
+                                    Cancel
                                 </button>
                             </div>
-                        </article>
-                    ))}
-                </div>
-            )}
-        </div>
+                        ) : (
+                            <div>
+                                <h2>{journal.title}</h2>
+
+                                <p>
+                                    <strong>Date:</strong>{" "}
+                                    {journal.date}
+                                </p>
+
+                                <p>
+                                    <strong>Mood:</strong>{" "}
+                                    {journal.mood}
+                                </p>
+
+                                <p>{journal.content}</p>
+
+                                {journal.photo && (
+                                    <img
+                                        src={`${API_URL}${journal.photo}`}
+                                        alt={journal.title || "Journal memory"}
+                                        style={{
+                                            maxWidth: "100%",
+                                            height: "auto",
+                                        }}
+                                        onError={(e) => {
+                                            e.currentTarget.style.display =
+                                                "none";
+                                        }}
+                                    />
+                                )}
+
+                                <div>
+                                    <button
+                                        onClick={() =>
+                                            startEditing(journal)
+                                        }
+                                    >
+                                        Edit
+                                    </button>
+
+                                    <button
+                                        onClick={() =>
+                                            deleteJournal(journal._id)
+                                        }
+                                    >
+                                        Delete
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </article>
+                ))}
+            </section>
+        </main>
     );
 }
 
 export default MyMemories;
-
