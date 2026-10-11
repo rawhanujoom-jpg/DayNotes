@@ -1,3 +1,5 @@
+require("dotenv").config();
+
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
@@ -7,67 +9,104 @@ const fs = require("fs");
 
 const app = express();
 
+// Middleware
 app.use(cors());
 app.use(express.json());
 
+// Upload folder
 const uploadFolder = path.join(__dirname, "uploads");
 
 if (!fs.existsSync(uploadFolder)) {
-    fs.mkdirSync(uploadFolder);
+    fs.mkdirSync(uploadFolder, { recursive: true });
 }
 
+// Serve uploaded photos
 app.use("/uploads", express.static(uploadFolder));
 
-mongoose.connect("mongodb://127.0.0.1:27017/daynotes")
-    .then(() => console.log("MongoDB connected"))
-    .catch(err => console.log(err));
+// MongoDB connection
+mongoose.connect(process.env.MONGO_URI)
+    .then(() => {
+        console.log("MongoDB connected successfully");
+    })
+    .catch((error) => {
+        console.error("MongoDB connection error:", error.message);
+    });
 
+// Journal schema
 const journalSchema = new mongoose.Schema({
-    title: String,
-    date: String,
-    mood: String,
-    content: String,
-    photo: String
+    title: {
+        type: String,
+        required: true
+    },
+    date: {
+        type: String,
+        required: true
+    },
+    mood: {
+        type: String,
+        default: ""
+    },
+    content: {
+        type: String,
+        required: true
+    },
+    photo: {
+        type: String,
+        default: ""
+    }
 });
 
 const Journal = mongoose.model("Journal", journalSchema);
 
+// Photo storage configuration
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         cb(null, uploadFolder);
     },
     filename: (req, file, cb) => {
-        cb(null, Date.now() + path.extname(file.originalname));
+        const extension = path.extname(file.originalname);
+        cb(null, Date.now() + extension);
     }
 });
 
 const upload = multer({ storage: storage });
 
+// CREATE a journal
 app.post("/journals", upload.single("photo"), async (req, res) => {
     try {
         const journal = new Journal({
             title: req.body.title,
             date: req.body.date,
+            mood: req.body.mood,
             content: req.body.content,
             photo: req.file ? "/uploads/" + req.file.filename : ""
         });
 
         await journal.save();
-        res.json(journal);
+
+        res.status(201).json(journal);
     } catch (error) {
-        res.status(500).json({ message: "Unable to save journal" });
+        console.error("Error saving journal:", error.message);
+        res.status(500).json({
+            message: "Unable to save journal"
+        });
     }
 });
 
+// READ all journals
 app.get("/journals", async (req, res) => {
-    const journals = await Journal.find().sort({ _id: -1 });
-    res.json(journals);
+    try {
+        const journals = await Journal.find().sort({ _id: -1 });
+        res.json(journals);
+    } catch (error) {
+        console.error("Error fetching journals:", error.message);
+        res.status(500).json({
+            message: "Unable to fetch journals"
+        });
+    }
 });
 
-app.delete("/journals/:id", async (req, res) => {
-    await Journal.findByIdAndDelete(req.params.id);
-    res.json({ message: "Journal deleted" });
-});
+// UPDATE a journal
 app.put("/journals/:id", upload.single("photo"), async (req, res) => {
     try {
         const updateData = {
@@ -84,19 +123,52 @@ app.put("/journals/:id", upload.single("photo"), async (req, res) => {
         const journal = await Journal.findByIdAndUpdate(
             req.params.id,
             updateData,
-            { new: true, runValidators: true }
+            {
+                new: true,
+                runValidators: true
+            }
         );
 
         if (!journal) {
-            return res.status(404).json({ message: "Journal not found" });
+            return res.status(404).json({
+                message: "Journal not found"
+            });
         }
 
         res.json(journal);
     } catch (error) {
-        res.status(500).json({ message: "Unable to update journal" });
+        console.error("Error updating journal:", error.message);
+        res.status(500).json({
+            message: "Unable to update journal"
+        });
     }
 });
 
-app.listen(5000, () => {
-    console.log("Server running on port 5000");
+// DELETE a journal
+app.delete("/journals/:id", async (req, res) => {
+    try {
+        const journal = await Journal.findByIdAndDelete(req.params.id);
+
+        if (!journal) {
+            return res.status(404).json({
+                message: "Journal not found"
+            });
+        }
+
+        res.json({
+            message: "Journal deleted successfully"
+        });
+    } catch (error) {
+        console.error("Error deleting journal:", error.message);
+        res.status(500).json({
+            message: "Unable to delete journal"
+        });
+    }
+});
+
+// Start server
+const PORT = process.env.PORT || 5000;
+
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
 });
